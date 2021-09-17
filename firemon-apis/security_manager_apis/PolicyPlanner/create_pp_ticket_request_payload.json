@@ -1,0 +1,39 @@
+{
+    "variables": {
+        "summary": "Request Test06",
+        "businessNeed": "",
+        "priority": "LOW",
+        "dueDate": "2021-05-29 13:44:58",
+        "applicationName": "",
+        "customer": "",
+        "externalTicketId": "",
+        "notes": "",
+        "requesterName": "System Administrator",
+        "requesterEmail": "",
+        "applicationOwner": "",
+        "integrationRecord": "",
+        "scReqItemSysId": "",
+        "scReqItemNumber": "",
+        "scRequestNumber": "",
+        "carbonCopy": [
+            ""
+        ]
+    },
+    "policyPlanRequirements": [
+        {
+            "sources": [
+                "1.1.1.1"
+            ],
+            "destinations": [
+                "2.2.2.2"
+            ],
+            "action": "ACCEPT",
+            "services": [
+                "http"
+            ],
+            "requirementType": "RULE",
+            "childKey": "add_access",
+            "variables": {}
+        }
+    ]
+}
