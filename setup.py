@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages  # noqa: H301
 
 NAME = "security-manager-apis"
-VERSION = "0.1.0"
+VERSION = "0.2.4"
 # To install the library, run the following
 #
 # python setup.py install
@@ -25,6 +25,9 @@ setup(
     python_requires ='>=3.6',
     packages=find_packages(where="src"),
     package_dir={'': 'src'},
+    package_data={'':['*']},
     include_package_data=True,
+    long_description_content_type='text/markdown',
     long_description=long_description
+    
 )
