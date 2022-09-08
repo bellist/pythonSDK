@@ -160,6 +160,13 @@ policyplan.pull_pp_ticket(ticket_id: str)
 ```
 * __ticket_id__: ID of ticket to be retrieved.
 
+__Retrieving Policy Planner Ticket Event History__
+```
+policyplan.pull_pp_ticket_events(ticket_id: str, page_size: int)
+```
+* __ticket_id__: ID of ticket to retrieve event history from.
+* __page_size__: Number of events to return
+
 __Assigning a Policy Planner Ticket__
 ```
 policyplan.assign_pp_ticket(ticket_id: str, user_id: str)

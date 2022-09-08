@@ -88,6 +88,22 @@ class PolicyPlannerApis():
             print("Exception occurred while retrieving policy planner ticket with workflow id '{0}'\n Exception : {1}".
                   format(workflow_id, e.response.text))
 
+    def pull_pp_ticket_events(self, ticket_id: str, page_size=100) -> dict:
+        """
+        making call to retrieve pp ticket api which retrieves a policy planner ticket on corresponding FMOS box
+        :param ticket_id: ID of ticket
+        :return: JSON of results
+        """
+        pp_tkt_url = self.parser.get('REST', 'get_events_pp_tkt_api').format(self.host, self.domain_id, self.workflow_id,
+                                                                           ticket_id, page_size)
+        try:
+            resp = requests.get(url=pp_tkt_url,
+                                headers=self.headers, verify=self.verify_ssl)
+            return resp.json()
+        except requests.exceptions.HTTPError as e:
+            print("Exception occurred while retrieving policy planner ticket events with workflow id '{0}'\n Exception : {1}".
+                  format(workflow_id, e.response.text))
+
     def assign_pp_ticket(self, ticket_id: str, user_id: str) -> str:
         """ making call to assign pp ticket api which
             asigns a policy planner ticket on corresponding FMOS box """
