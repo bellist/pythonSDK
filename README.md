@@ -167,6 +167,27 @@ policyplan.pull_pp_ticket_events(ticket_id: str, page_size: int)
 * __ticket_id__: ID of ticket to retrieve event history from.
 * __page_size__: Number of events to return
 
+__Retrieving Policy Planner Ticket Attachments__
+```
+policyplan.pull_pp_ticket_attachements(ticket_id: str, page_size=100)
+```
+* __ticket_id__: ID of ticket to retrieve event history from.
+* __page_size__: Number of events to return
+
+__Download Policy Planner Ticket Attachments__
+```
+policyplan.download_pp_ticket_attachment(self, ticket_id: str, attachment_id: str)
+```
+* __ticket_id__: ID of ticket to retrieve event history from.
+* __attachment_id__: ID of attachment to fetch
+
+_Coding Example:_
+```
+attachment_resp = pp.download_pp_ticket_attachment(ticket_id, attachment_id)
+file_name = attachment_resp.headers['filename']
+open(file_name, 'wb').write(attachment_resp.content)
+```
+
 __Assigning a Policy Planner Ticket__
 ```
 policyplan.assign_pp_ticket(ticket_id: str, user_id: str)
