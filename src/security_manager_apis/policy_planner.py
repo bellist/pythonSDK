@@ -141,7 +141,7 @@ class PolicyPlannerApis():
             print("Exception occurred while retrieving policy planner ticket events with workflow id '{0}'\n Exception : {1}".
                   format(workflow_id, e.response.text))
 
-    def assign_pp_ticket(self, ticket_id: str, user_id: str) -> str:
+    def assign_pp_ticket(self, ticket_id: str, user_id: str):
         """ making call to assign pp ticket api which
             asigns a policy planner ticket on corresponding FMOS box """
         ticket_json = self.pull_pp_ticket(ticket_id)
@@ -151,11 +151,11 @@ class PolicyPlannerApis():
                                                                              self.workflow_id, workflow_task_id,
                                                                              ticket_id, workflow_packet_task_id)
         try:
-            if self.is_assigned(ticket_json):
-                self.unassign_pp_ticket(ticket_id)
+            self.headers['Content-Type'] = 'text/plain'
             resp = requests.put(url=pp_tkt_url,
                                 headers=self.headers, data=user_id, verify=self.verify_ssl)
-            return str(resp.status_code)
+            self.headers['Content-Type'] = 'applicationjson'
+            return resp
         except requests.exceptions.HTTPError as e:
             print("Exception occurred while assigning policy planner ticket with workflow id '{0}'\n Exception : {1}".
                   format(workflow_id, e.response.text))
@@ -203,11 +203,11 @@ class PolicyPlannerApis():
                 "Exception occurred while adding a requirement to policy planner ticket with workflow id '{0}'\n Exception : {1}".
                 format(workflow_id, e.response.text))
 
-    def complete_task_pp_ticket(self, ticket_id: str, button_action: str) -> list:
+    def complete_task_pp_ticket(self, ticket_id: str, button_action: str):
         """
         :param ticket_id: Ticket ID
         :param button_action: button value as string, options are: submit, complete, autoDesign, verify, approved
-        :return: Response code and reason
+        :return: Response class
         """
         ticket_json = self.pull_pp_ticket(ticket_id)
         workflow_packet_task_id = self.get_workflow_packet_task_id(ticket_json)
@@ -218,7 +218,7 @@ class PolicyPlannerApis():
         try:
             resp = requests.put(url=pp_tkt_url,
                                 headers=self.headers, json={}, verify=self.verify_ssl)
-            return resp.status_code, resp.reason
+            return resp
         except requests.exceptions.HTTPError as e:
             print(
                 "Exception occurred while completing task on policy planner ticket with workflow id '{0}'\n Exception : {1}".
@@ -478,7 +478,7 @@ class PolicyPlannerApis():
         curr_stage = ticket_json['status']
         workflow_packet_tasks = ticket_json['workflowPacketTasks']
         for t in workflow_packet_tasks:
-            if t['workflowTask']['name'] == curr_stage:
+            if t['workflowTask']['name'] == curr_stage and 'completed' not in t:
                 return str(t['id'])
 
     def get_workflow_task_id(self, ticket_json: dict) -> str:
@@ -490,7 +490,7 @@ class PolicyPlannerApis():
         curr_stage = ticket_json['status']
         workflow_packet_tasks = ticket_json['workflowPacketTasks']
         for t in workflow_packet_tasks:
-            if t['workflowTask']['name'] == curr_stage:
+            if t['workflowTask']['name'] == curr_stage and 'completed' not in t:
                 return str(t['workflowTask']['id'])
 
     def get_workflow_id_by_workflow_name(self, domain_id: str, workflow_name: str) -> str:
