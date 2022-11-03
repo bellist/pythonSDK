@@ -203,6 +203,21 @@ class PolicyPlannerApis():
                 "Exception occurred while adding a requirement to policy planner ticket with workflow id '{0}'\n Exception : {1}".
                 format(workflow_id, e.response.text))
 
+    def replace_req_pp_ticket(self, ticket_id: str, req_json: dict) -> str:
+        ticket_json = self.pull_pp_ticket(ticket_id)
+        workflow_task_id = self.get_workflow_task_id(ticket_json)
+        pp_tkt_url = self.parser.get('REST', 'replace_req_pp_tkt_api_url').format(self.host, self.domain_id,
+                                                                              self.workflow_id,
+                                                                              workflow_task_id, ticket_id)
+        try:
+            resp = requests.post(url=pp_tkt_url,
+                                 headers=self.headers, json=req_json, verify=self.verify_ssl)
+            return str(resp.status_code)
+        except requests.exceptions.HTTPError as e:
+            print(
+                "Exception occurred while adding a requirement to policy planner ticket with workflow id '{0}'\n Exception : {1}".
+                format(workflow_id, e.response.text))
+
     def complete_task_pp_ticket(self, ticket_id: str, button_action: str):
         """
         :param ticket_id: Ticket ID
@@ -321,7 +336,7 @@ class PolicyPlannerApis():
         attachment_posted = self.post_attachment(ticket_id, attachment_staged)
         return attachment_posted
 
-    def csv_req_upload(self, ticket_id: str, file_name: str, f):
+    def csv_req_upload(self, ticket_id: str, file_name: str, f, behavior="append"):
         pp_tkt_url = self.parser.get('REST', 'parse_csv_pp_tkt_api').format(self.host, self.domain_id, self.workflow_id)
         self.headers['Content-Type'] = 'multipart/form-data'
         try:
@@ -335,7 +350,10 @@ class PolicyPlannerApis():
         for r in requirements_parsed['policyPlanRequirementErrorDTOs']:
             requirements_formatted['requirements'].append(r['policyPlanRequirementDTO'])
         self.headers['Content-Type'] = 'application/json; charset=utf-8'
-        post_req = self.add_req_pp_ticket(ticket_id, requirements_formatted)
+        if behavior == "replace":
+            post_req = self.replace_req_pp_ticket(ticket_id, requirements_formatted)
+        else:
+            post_req = self.add_req_pp_ticket(ticket_id, requirements_formatted)
         f.seek(0)
         self.headers['Content-Type'] = 'multipart/form-data'
         self.add_attachment(ticket_id, file_name, f, 'Attached original CSV file')

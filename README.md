@@ -234,6 +234,13 @@ _Requirement JSON Example:_
 }
 ```
 
+__Replacing Requirements on a Policy Planner Ticket__
+```
+policyplan.replace_req_pp_ticket(self, ticket_id: str, req_json: dict)
+```
+* __ticket_id__: ID of ticket to add requirements to.
+* __req_json__: JSON of requirements to be added.
+
 __Completing a Policy Planner Ticket Task__
 ```
 policyplan.complete_task_pp_ticket(ticket_id: str, button_action: str)
@@ -267,11 +274,12 @@ with open(file_name) as f:
 
 __Uploading Requirements via CSV to Policy Planner Ticket__
 ```
-policyplan.csv_req_upload(ticket_id: str, file_name: str, f):
+policyplan.csv_req_upload(ticket_id: str, file_name: str, f, behavior="append"):
 ```
 * __ticket_id__: ID of ticket to add attachment to.
 * __filename__: File name of attachment.
 * __f__: file stream.
+* __behavior__: Defaulted to `append`, pass `replace` to replace all requirements on the ticket with the new CSV requirements
 
 _Uploading Requirements via CSV Code Example:_
 ```
