@@ -379,6 +379,26 @@ class PolicyPlannerApis():
                 "Exception occurred while fetching requirements on policy planner ticket with workflow id '{0}'\n Exception : {1}".
                     format(workflow_id, e.response.text))
 
+    def get_changes(self, ticket_id: str) -> dict:
+        """
+        Retrieves JSON of changes for ticket
+        :param ticket_id: Ticket ID
+        :return: JSON of changes
+        """
+        ticket_json = self.pull_pp_ticket(ticket_id)
+        workflow_task_id = self.get_workflow_task_id(ticket_json)
+        pp_tkt_url = self.parser.get('REST', 'get_pp_tkt_changes').format(self.host, self.domain_id, self.workflow_id,
+                                                                           workflow_task_id,
+                                                                           ticket_id)
+        try:
+            resp = requests.get(url=pp_tkt_url,
+                                headers=self.headers, verify=self.verify_ssl)
+            return resp.json()
+        except requests.exceptions.HTTPError as e:
+            print(
+                "Exception occurred while fetching changes on policy planner ticket with workflow id '{0}'\n Exception : {1}".
+                    format(workflow_id, e.response.text))
+
     def del_all_reqs(self, ticket_id: str) -> dict:
         """
         Deletes requirements for ticket
@@ -435,6 +455,29 @@ class PolicyPlannerApis():
         except requests.exceptions.HTTPError as e:
             print(
                 "Exception occurred while approving requirement on policy planner ticket with workflow id '{0}'\n Exception : {1}".
+                    format(workflow_id, e.response.text))
+
+    def update_change(self, ticket_id: str, req_id: str, change_id: str, change_json: dict) -> list:
+        """
+        Update a change on policy planner requirement
+        :param ticket_id: ID of ticket
+        :param req_id: ID of requirement
+        :param change_id: ID of change
+        :param change: JSON of change
+        :return: Response code, reason, JSON as list
+        """
+        ticket_json = self.pull_pp_ticket(ticket_id)
+        workflow_task_id = self.get_workflow_task_id(ticket_json)
+        pp_tkt_url = self.parser.get('REST', 'update_pp_tkt_change').format(self.host, self.domain_id,
+                                                                              self.workflow_id, workflow_task_id,
+                                                                              ticket_id, req_id, change_id)
+        try:
+            resp = requests.put(url=pp_tkt_url,
+                                headers=self.headers, json=change_json, verify=self.verify_ssl)
+            return resp.status_code, resp.reason
+        except requests.exceptions.HTTPError as e:
+            print(
+                "Exception occurred while updating a change on policy planner ticket with workflow id '{0}'\n Exception : {1}".
                     format(workflow_id, e.response.text))
 
     def add_comment(self, ticket_id: str, comment: str) -> list:

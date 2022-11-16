@@ -294,6 +294,22 @@ policyplan.get_reqs(ticket_id: str)
 ```
 * __ticket_id__: ID of ticket to retrieve requirements from.
 
+__Retrieving Changes from a Policy Planner Ticket__
+```
+policyplan.get_changes(ticket_id: str)
+```
+* __ticket_id__: ID of ticket to retrieve requirements from.
+
+__Updating Change on a Policy Planner Ticket__
+```
+policyplan.update_change(ticket_id: str, req_id: str, change_id: str, change_json: dict)
+```
+* __ticket_id__: ID of ticket
+* __req_id__: ID of requirement change is tied to
+* __change_id__: ID of change to update
+* __change_json__: JSON of change update
+
+
 __Deleting Requirements from a Policy Planner Ticket__
 ```
 policyplan.del_all_reqs(ticket_id: str)
