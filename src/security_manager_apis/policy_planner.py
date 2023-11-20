@@ -7,10 +7,18 @@ from security_manager_apis.get_properties_data import get_properties_data
 
 class PolicyPlannerApis():
 
-    def __init__(self, host: str, username: str, password: str, verify_ssl: bool, domain_id: str, workflow_name: str, suppress_ssl_warning=False):
-        """ User needs to pass host,username,password,and verify_ssl as parameters while
-            creating instance of this class and internally Authentication class instance
-            will be created which will set authentication token in the header to get firemon API access
+    def __init__(self, host: str, username: str, password: str, verify_ssl: bool, domain_id: str, workflow_name: str, suppress_ssl_warning=False, max_retries=1):
+        """
+        Method to create Policy Planner ticket
+        :param host: Base URL
+        :param username: Username
+        :param password: Password
+        :param verify_ssl: Verify SSL (True or False)
+        :param domain_id: Domain ID, typically 1
+        :param workflow_name: Name of targeted workflow
+        :param suppress_ssl_warning: Suppress SSL warning (True or False), default to False
+        :param max_retries: Max number of attempts to retry a request, default to 1
+        :return: None
         """
         if suppress_ssl_warning:
             requests.packages.urllib3.disable_warnings(requests.packages.urllib3.exceptions.InsecureRequestWarning)
@@ -22,6 +30,7 @@ class PolicyPlannerApis():
         self.api_resp = ''
         self.domain_id = domain_id
         self.workflow_id = self.get_workflow_id_by_workflow_name(domain_id, workflow_name)
+        self.max_retries = max_retries
 
     def create_pp_ticket(self, request_body: dict) -> dict:
         """
@@ -30,12 +39,18 @@ class PolicyPlannerApis():
         :return: JSON of ticket
         """
         endpoint = self.parser.get('REST', 'create_pp_tkt_api_url').format(self.host, self.domain_id, self.workflow_id)
-        try:
-            resp = requests.post(url=endpoint, headers=self.headers, json=request_body, verify=self.verify_ssl)
-            resp.raise_for_status()
-            return resp.json()
-        except requests.exceptions.HTTPError as e:
-            raise SystemExit("Exception occurred creating Policy Planner ticket: {0}\nMessage: {1}".format(e, e.response.text))
+        for n in range(self.max_retries):
+            try:
+                resp = requests.post(url=endpoint, headers=self.headers, json=request_body, verify=self.verify_ssl)
+                if resp.status_code == 401:
+                    self.headers = self.api_instance.get_auth_token()
+                else:
+                    resp.raise_for_status()
+                    return resp.json()
+            except requests.exceptions.HTTPError as e:
+                raise SystemExit("Exception occurred creating Policy Planner ticket: {0}\nMessage: {1}".format(e, e.response.text))
+        else:
+            raise SystemExit("Exception creating Policy Planner ticket: {0}\nMessage: {1}".format(resp.status_code, resp.reason))
 
     def siql_query_pp_ticket(self, siql_query: str, page_size: int) -> dict:
         """
@@ -203,7 +218,7 @@ class PolicyPlannerApis():
         except requests.exceptions.HTTPError as e:
             raise SystemExit("Exception occurred replacing requirements on Policy Planner ticket: {0}\nMessage: {1}".format(e, e.response.text))
 
-    def complete_task_pp_ticket(self, ticket_id: str, button_action: str):
+    def complete_task_pp_ticket(self, ticket_id: str, button_action: str, timeout=None):
         """
         Method to complete Policy Planner ticket task
         :param ticket_id: Ticket ID
@@ -215,13 +230,15 @@ class PolicyPlannerApis():
         workflow_task_id = self.get_workflow_task_id(ticket_json)
         endpoint = self.parser.get('REST', 'comp_task_pp_tkt_api').format(self.host, self.domain_id, self.workflow_id, workflow_task_id, ticket_id, workflow_packet_task_id, button_action)
         try:
-            resp = requests.put(url=endpoint, headers=self.headers, json={}, verify=self.verify_ssl)
+            resp = requests.put(url=endpoint, headers=self.headers, json={}, verify=self.verify_ssl, timeout=timeout)
             resp.raise_for_status()
             return resp
         except requests.exceptions.HTTPError as e:
             raise SystemExit("Exception occurred completing Policy Planner ticket task: {0}\nMessage: {1}".format(e, e.response.text))
+        except requests.exceptions.Timeout:
+            raise SystemExit("Timeout exception occurred completing Policy Planner ticket task")
 
-    def do_pca(self, ticket_id: str, control_types: str, enable_risk_sa: str):
+    def do_pca(self, ticket_id: str, control_types: str, enable_risk_sa: str, timeout=None):
         """
         Method to run Pre-Change Assessment for Policy Planner ticket changes
         :param ticket_id: Ticket ID
@@ -230,12 +247,13 @@ class PolicyPlannerApis():
         NETWORK_ACCESS_ANALYSIS, REGEX, REGEX_MULITPATTERN, RULE_SEARCH, RULE_USAGE, SERVICE_RISK_ANALYSIS,
         ZONE_MATRIX, ZONE_BASED_RULE_SEARCH
         :param enable_risk_sa: true or false
+        :param timeout: Timeout amount in seconds, default to None
         :return: response code and reason
         """
         controls_formatted = self.parse_controls(control_types)
         endpoint = self.parser.get('REST', 'run_pca_pp_tkt_api').format(self.host, self.domain_id, self.workflow_id, ticket_id, controls_formatted, enable_risk_sa)
         try:
-            resp = requests.post(url=endpoint, headers=self.headers, verify=self.verify_ssl)
+            resp = requests.post(url=endpoint, headers=self.headers, verify=self.verify_ssl, timeout=timeout)
             resp.raise_for_status()
             return resp.status_code, resp.reason
         except requests.exceptions.HTTPError as e:
@@ -514,12 +532,18 @@ class PolicyPlannerApis():
         """
         self.headers['Connection'] = 'Close'
         endpoint = self.parser.get('REST', 'logout_api_url').format(self.host)
-        try:
-            resp = requests.post(url=endpoint, headers=self.headers, verify=self.verify_ssl)
-            resp.raise_for_status()
-            return resp.status_code, resp.reason
-        except requests.exceptions.HTTPError as e:
-            raise SystemExit("Exception logging out of session: {0}\nMessage: {1}".format(e, e.response.text))
+        for n in range(self.max_retries):
+            try:
+                resp = requests.post(url=endpoint, headers=self.headers, verify=self.verify_ssl)
+                if resp.status_code == 401:
+                    self.headers = self.api_instance.get_auth_token()
+                else:
+                    resp.raise_for_status()
+                    return resp.status_code, resp.reason
+            except requests.exceptions.HTTPError as e:
+                raise SystemExit("Exception logging out of session: {0}\nMessage: {1}".format(e, e.response.text))
+        else:
+            raise SystemExit("Exception logging out of session: {0}\nMessage: {1}".format(resp.status_code, resp.reason))
 
     def get_workflow_packet_task_id(self, ticket_json: dict) -> str:
         """

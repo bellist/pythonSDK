@@ -15,9 +15,8 @@ class SecurityManagerApis():
             requests.packages.urllib3.disable_warnings(requests.packages.urllib3.exceptions.InsecureRequestWarning)
         self.parser = get_properties_data()
         self.api_instance = authenticate_user.Authentication(host, username, password, verify_ssl)
-        self.headers = self.api_instance.get_auth_token()
+        self.fm_api_session = self.api_instance.get_auth_token()
         self.host = host
-        self.verify_ssl = verify_ssl
         self.api_resp = ''
         self.domain_id = domain_id
 
@@ -27,7 +26,7 @@ class SecurityManagerApis():
         """
         endpoint = self.parser.get('REST', 'get_dev_sm_api').format(self.host, self.domain_id)
         try:
-            resp = requests.get(url=endpoint, headers=self.headers, verify=self.verify_ssl)
+            resp = self.fm_api_session.get(url=endpoint)
             resp.raise_for_status()
             return resp.json()
         except requests.exceptions.HTTPError as e:
@@ -42,7 +41,7 @@ class SecurityManagerApis():
         endpoint = self.parser.get('REST', 'man_ret_dev_sm_api').format(self.host, self.domain_id, device_id)
         payload = {}
         try:
-            resp = requests.post(url=endpoint, headers=self.headers, json=payload, verify=self.verify_ssl)
+            resp = self.fm_api_session.post(url=endpoint, json=payload)
             resp.raise_for_status()
             return resp.status_code
         except requests.exceptions.HTTPError as e:
@@ -59,7 +58,7 @@ class SecurityManagerApis():
         endpoint = self.parser.get('REST', 'siql_query_sm_api').format(self.host, query_type)
         parameters = {'q': query, 'pageSize': page_size }
         try:
-            resp = requests.get(url=endpoint, headers=self.headers, params=parameters, verify=self.verify_ssl)
+            resp = self.fm_api_session.get(url=endpoint, params=parameters)
             resp.raise_for_status()
             return resp.json()
         except requests.exceptions.HTTPError as e:
@@ -74,7 +73,7 @@ class SecurityManagerApis():
         endpoint = self.parser.get('REST', 'create_device_group').format(self.host, self.domain_id)
         payload = {'name': device_group_name, 'domainId': self.domain_id }
         try:
-            resp = requests.post(url=endpoint, headers=self.headers, json=payload, verify=self.verify_ssl)
+            resp = self.fm_api_session.post(url=endpoint, json=payload)
             resp.raise_for_status()
             return resp
         except requests.exceptions.HTTPError as e:
@@ -89,7 +88,7 @@ class SecurityManagerApis():
         """
         endpoint = self.parser.get('REST', 'add_device_to_group').format(self.host, self.domain_id, device_group_id, device_id)
         try:
-            resp = requests.post(url=endpoint, headers=self.headers, verify=self.verify_ssl)
+            resp = self.fm_api_session.post(url=endpoint)
             resp.raise_for_status()
             return resp
         except requests.exceptions.HTTPError as e:
@@ -103,7 +102,7 @@ class SecurityManagerApis():
         """
         endpoint = self.parser.get('REST', 'get_device_group_name').format(self.host, self.domain_id, device_group_name)
         try:
-            resp = requests.get(url=endpoint, headers=self.headers, verify=self.verify_ssl)
+            resp = self.fm_api_session.get(url=endpoint)
             resp.raise_for_status()
             return resp
         except requests.exceptions.HTTPError as e:
@@ -119,7 +118,7 @@ class SecurityManagerApis():
         endpoint = self.parser.get('REST', 'zone_search_sm_api').format(self.host, self.domain_id, device_id)
         parameters = {'pageSize': page_size}
         try:
-            resp = requests.get(url=endpoint, headers=self.headers, params=parameters, verify=self.verify_ssl)
+            resp = self.fm_api_session.get(url=endpoint, params=parameters)
             resp.raise_for_status()
             return resp.json()
         except requests.exceptions.HTTPError as e:
@@ -135,7 +134,7 @@ class SecurityManagerApis():
         """
         endpoint = self.parser.get('REST', 'fw_obj_sm_api').format(self.host, obj_type, device_id, match_id)
         try:
-            resp = requests.get(url=endpoint, headers=self.headers, verify=self.verify_ssl)
+            resp = self.fm_api_session.get(url=endpoint)
             resp.raise_for_status()
             return resp.json()
         except requests.exceptions.HTTPError as e:
@@ -149,7 +148,7 @@ class SecurityManagerApis():
         """
         endpoint = self.parser.get('REST', 'dev_obj_sm_api').format(self.host, self.domain_id, device_id)
         try:
-            resp = requests.get(url=endpoint, headers=self.headers, verify=self.verify_ssl)
+            resp = self.fm_api_session.get(url=endpoint)
             resp.raise_for_status()
             return resp.json()
         except requests.exceptions.HTTPError as e:
@@ -165,7 +164,7 @@ class SecurityManagerApis():
         self.verify_route_json(supplemental_route)
         endpoint = self.parser.get('REST', 'supp_route_sm_api').format(self.host, device_id)
         try:
-            resp = requests.post(url=endpoint, headers=self.headers, json=supplemental_route, verify=self.verify_ssl)
+            resp = self.fm_api_session.post(url=endpoint, json=supplemental_route)
             resp.raise_for_status()
             return [resp.status_code, resp.reason, resp.json()]
         except requests.exceptions.HTTPError as e:
@@ -180,7 +179,7 @@ class SecurityManagerApis():
         """
         endpoint = self.parser.get('REST', 'get_rule_doc').format(self.host, self.domain_id, device_id, rule_id)
         try:
-            resp = requests.get(url=endpoint, headers=self.headers, verify=self.verify_ssl)
+            resp = self.fm_api_session.get(url=endpoint)
             resp.raise_for_status()
             return resp.json()
         except requests.exceptions.HTTPError as e:
@@ -195,7 +194,7 @@ class SecurityManagerApis():
         """
         endpoint = self.parser.get('REST', 'update_rule_doc').format(self.host, self.domain_id, device_id)
         try:
-            resp = requests.put(url=endpoint, headers=self.headers, json=rule_doc, verify=self.verify_ssl)
+            resp = self.fm_api_session.put(url=endpoint, json=rule_doc)
             resp.raise_for_status()
             return [resp.status_code, resp.reason]
         except requests.exceptions.HTTPError as e:
@@ -209,7 +208,7 @@ class SecurityManagerApis():
         """
         endpoint = self.parser.get('REST', 'get_all_users').format(self.host, self.domain_id, page_size)
         try:
-            resp = requests.get(url=endpoint, headers=self.headers, verify=self.verify_ssl)
+            resp = self.fm_api_session.get(url=endpoint)
             resp.raise_for_status()
             return resp.json()
         except requests.exceptions.HTTPError as e:
@@ -224,7 +223,7 @@ class SecurityManagerApis():
         """
         endpoint = self.parser.get('REST', 'user_by_username').format(self.host, self.domain_id, page_size, username)
         try:
-            resp = requests.get(url=endpoint, headers=self.headers, verify=self.verify_ssl)
+            resp = self.fm_api_session.get(url=endpoint)
             resp.raise_for_status()
             return resp.json()
         except requests.exceptions.HTTPError as e:
@@ -238,7 +237,7 @@ class SecurityManagerApis():
         """
         endpoint = self.parser.get('REST', 'get_user_groups').format(self.host, self.domain_id, page_size)
         try:
-            resp = requests.get(url=endpoint, headers=self.headers, verify=self.verify_ssl)
+            resp = self.fm_api_session.get(url=endpoint)
             resp.raise_for_status()
             return resp.json()
         except requests.exceptions.HTTPError as e:
@@ -253,7 +252,7 @@ class SecurityManagerApis():
         """
         endpoint = self.parser.get('REST', 'get_users_in_user_groups').format(self.host, self.domain_id, user_group_id, page_size)
         try:
-            resp = requests.get(url=endpoint, headers=self.headers, verify=self.verify_ssl)
+            resp = self.fm_api_session.get(url=endpoint)
             resp.raise_for_status()
             return resp.json()
         except requests.exceptions.HTTPError as e:
@@ -268,7 +267,7 @@ class SecurityManagerApis():
         """
         endpoint = self.parser.get('REST', 'assign_to_user_group').format(self.host, self.domain_id, user_group_id, user_id)
         try:
-            resp = requests.post(url=endpoint, headers=self.headers, verify=self.verify_ssl)
+            resp = self.fm_api_session.post(url=endpoint)
             resp.raise_for_status()
             return resp
         except requests.exceptions.HTTPError as e:
@@ -278,10 +277,10 @@ class SecurityManagerApis():
         """
         Method to logout of current session
         """
-        self.headers['Connection'] = 'Close'
+        self.fm_api_session.headers.update({'Connection': 'Close'})
         endpoint = self.parser.get('REST', 'logout_api_url').format(self.host)
         try:
-            resp = requests.post(url=endpoint, headers=self.headers, verify=self.verify_ssl)
+            resp = self.fm_api_session.post(url=endpoint)
             resp.raise_for_status()
             return [resp.status_code, resp.reason]
         except requests.exceptions.HTTPError as e:
