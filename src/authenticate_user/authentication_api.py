@@ -7,15 +7,23 @@ headers = {
 }
 
 
-class Authentication():
+class Authentication:
 
     def __init__(self, host, username, password, verify_ssl):
         self.host = host
         self.username = username
         self.password = password
-        self.verify_ssl = verify_ssl
-        self.headers = ""
+        self.fm_session = requests.session()
+        self.fm_session.verify = verify_ssl
         self.BASE_AUTH_URL = "{}/securitymanager/api/authentication/login"
+
+    def __api_request(self, method: str, endpoint: str, payload=None, parameters=None, data=None):
+        try:
+            resp = self.fm_session.request(method, endpoint, json=payload, params=parameters, data=data, )
+            resp.raise_for_status()
+            return resp
+        except requests.exceptions.HTTPError:
+            raise
 
     def get_auth_token(self):
         """ 
@@ -25,15 +33,12 @@ class Authentication():
         """
         payload = {'username': self.username, 'password': self.password}
         # Security manager url
-        fm_session = requests.session()
         auth_url = self.BASE_AUTH_URL.format(self.host)
-        result = fm_session.post(auth_url, headers=headers, json=payload, verify=self.verify_ssl)
+        result = self.__api_request('POST', auth_url, payload)
         auth_token = result.json()
-        self.headers = {
+        self.fm_session.headers.update({
             'Content-Type': 'applicationjson',
             'Accept': 'applicationjson',
             'X-FM-Auth-Token': auth_token.get('token'),
-        }
-        fm_session.headers.update(self.headers)
-        fm_session.verify = self.verify_ssl
-        return fm_session
+        })
+        return self.fm_session

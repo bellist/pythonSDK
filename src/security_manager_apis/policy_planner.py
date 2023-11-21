@@ -1,13 +1,39 @@
 from typing import Any
-
 import requests
 import authenticate_user
 from security_manager_apis.get_properties_data import get_properties_data
 
 
-class PolicyPlannerApis():
+def is_assigned(ticket_json: dict) -> bool:
+    """
+    Method to check if a ticket is assigned to the current user
+    :param ticket_json: JSON of targeted ticket
+    :return: True or False
+    """
+    if 'assignee' in ticket_json:
+        return True
+    else:
+        return False
 
-    def __init__(self, host: str, username: str, password: str, verify_ssl: bool, domain_id: str, workflow_name: str, suppress_ssl_warning=False, max_retries=1):
+
+def parse_controls(controls: str) -> str:
+    """
+    Method to parse control string passed to a URL parameter
+    :param controls: Comma delimited list of controls as string
+    :return: URL query as string
+    """
+    output = ''
+    controls_list = controls.split(',')
+    for c in range(0, len(controls_list)):
+        if len(controls_list) > 1 and c > 0:
+            output = output + '&'
+        output = output + 'controlTypes=' + controls_list[c]
+    return output
+
+
+class PolicyPlannerApis:
+
+    def __init__(self, host: str, username: str, password: str, verify_ssl: bool, domain_id: str, workflow_name: str, suppress_ssl_warning=False):
         """
         Method to create Policy Planner ticket
         :param host: Base URL
@@ -17,20 +43,28 @@ class PolicyPlannerApis():
         :param domain_id: Domain ID, typically 1
         :param workflow_name: Name of targeted workflow
         :param suppress_ssl_warning: Suppress SSL warning (True or False), default to False
-        :param max_retries: Max number of attempts to retry a request, default to 1
         :return: None
         """
         if suppress_ssl_warning:
             requests.packages.urllib3.disable_warnings(requests.packages.urllib3.exceptions.InsecureRequestWarning)
         self.parser = get_properties_data()
         self.api_instance = authenticate_user.Authentication(host, username, password, verify_ssl)
-        self.headers = self.api_instance.get_auth_token()
+        self.fm_api_session = self.api_instance.get_auth_token()
         self.host = host
-        self.verify_ssl = verify_ssl
-        self.api_resp = ''
         self.domain_id = domain_id
         self.workflow_id = self.get_workflow_id_by_workflow_name(domain_id, workflow_name)
-        self.max_retries = max_retries
+        self.workflow_task_id = ""
+        self.workflow_packet_task_id = ""
+
+    def __api_request(self, method: str, endpoint: str, payload=None, parameters=None, data=None, timeout=None, files=None):
+        try:
+            resp = self.fm_api_session.request(method, endpoint, json=payload, params=parameters, data=data, timeout=timeout, files=files)
+            resp.raise_for_status()
+            return resp
+        except requests.exceptions.HTTPError:
+            raise
+        except requests.exceptions.Timeout:
+            raise
 
     def create_pp_ticket(self, request_body: dict) -> dict:
         """
@@ -39,18 +73,8 @@ class PolicyPlannerApis():
         :return: JSON of ticket
         """
         endpoint = self.parser.get('REST', 'create_pp_tkt_api_url').format(self.host, self.domain_id, self.workflow_id)
-        for n in range(self.max_retries):
-            try:
-                resp = requests.post(url=endpoint, headers=self.headers, json=request_body, verify=self.verify_ssl)
-                if resp.status_code == 401:
-                    self.headers = self.api_instance.get_auth_token()
-                else:
-                    resp.raise_for_status()
-                    return resp.json()
-            except requests.exceptions.HTTPError as e:
-                raise SystemExit("Exception occurred creating Policy Planner ticket: {0}\nMessage: {1}".format(e, e.response.text))
-        else:
-            raise SystemExit("Exception creating Policy Planner ticket: {0}\nMessage: {1}".format(resp.status_code, resp.reason))
+        resp = self.__api_request('POST', endpoint, request_body)
+        return resp.json()
 
     def siql_query_pp_ticket(self, siql_query: str, page_size: int) -> dict:
         """
@@ -61,12 +85,8 @@ class PolicyPlannerApis():
         """
         endpoint = self.parser.get('REST', 'siql_query_pp_tkt_api').format(self.host, self.domain_id)
         parameters = {'q': siql_query, 'pageSize': page_size, 'domainid': self.domain_id}
-        try:
-            resp = requests.get(url=endpoint, headers=self.headers, params=parameters, verify=self.verify_ssl)
-            resp.raise_for_status()
-            return resp.json()
-        except requests.exceptions.HTTPError as e:
-            raise SystemExit("Exception occurred executing SIQL query: {0}\nMessage: {1}".format(e, e.response.text))
+        resp = self.__api_request('GET', endpoint, None, parameters)
+        return resp.json()
 
     def update_pp_ticket(self, ticket_id: str, request_body: dict) -> str:
         """
@@ -76,12 +96,8 @@ class PolicyPlannerApis():
         :return: Status code of API Call
         """
         endpoint = self.parser.get('REST', 'update_pp_tkt_api_url').format(self.host, self.domain_id, self.workflow_id, ticket_id)
-        try:
-            resp = requests.put(url=endpoint, headers=self.headers, json=request_body, verify=self.verify_ssl)
-            resp.raise_for_status()
-            return str(resp.status_code)
-        except requests.exceptions.HTTPError as e:
-            raise SystemExit("Exception occurred updating Policy Planner ticket: {0}\nMessage: {1}".format(e, e.response.text))
+        resp = self.__api_request('PUT', endpoint, request_body)
+        return resp
 
     def pull_pp_ticket(self, ticket_id: str) -> dict:
         """
@@ -90,12 +106,10 @@ class PolicyPlannerApis():
         :return: JSON of ticket
         """
         endpoint = self.parser.get('REST', 'pull_pp_tkt_api_url').format(self.host, self.domain_id, self.workflow_id, ticket_id)
-        try:
-            resp = requests.get(url=endpoint, headers=self.headers, verify=self.verify_ssl)
-            resp.raise_for_status()
-            return resp.json()
-        except requests.exceptions.HTTPError as e:
-            raise SystemExit("Exception occurred retrieving Policy Planner ticket: {0}\nMessage: {1}".format(e, e.response.text))
+        resp = self.__api_request('GET', endpoint).json()
+        self.get_workflow_packet_task_id(resp)
+        self.get_workflow_task_id(resp)
+        return resp
 
     def pull_pp_ticket_attachments(self, ticket_id: str, page_size=100) -> dict:
         """
@@ -105,12 +119,8 @@ class PolicyPlannerApis():
         :return: JSON of attachments
         """
         endpoint = self.parser.get('REST', 'get_attachments_pp_tkt_api').format(self.host, self.domain_id, self.workflow_id, ticket_id, page_size)
-        try:
-            resp = requests.get(url=endpoint, headers=self.headers, verify=self.verify_ssl)
-            resp.raise_for_status()
-            return resp.json()
-        except requests.exceptions.HTTPError as e:
-            raise SystemExit("Exception occurred retrieving Policy Planner ticket attachments: {0}\nMessage: {1}".format(e, e.response.text))
+        resp = self.__api_request('GET', endpoint)
+        return resp.json()
 
     def download_pp_ticket_attachment(self, ticket_id: str, attachment_id: str):
         """
@@ -120,12 +130,8 @@ class PolicyPlannerApis():
         :return: JSON of ticket
         """
         endpoint = self.parser.get('REST', 'download_attachment_pp_tkt_api').format(self.host, self.domain_id, self.workflow_id, ticket_id, attachment_id)
-        try:
-            resp = requests.get(url=endpoint, headers=self.headers, verify=self.verify_ssl)
-            resp.raise_for_status()
-            return resp
-        except requests.exceptions.HTTPError as e:
-            raise SystemExit("Exception occurred downloading Policy Planner ticket attachments: {0}\nMessage: {1}".format(e, e.response.text))
+        resp = self.__api_request('GET', endpoint)
+        return resp
 
     def pull_pp_ticket_events(self, ticket_id: str, page_size=100) -> dict:
         """
@@ -135,12 +141,8 @@ class PolicyPlannerApis():
         :return: JSON of results
         """
         endpoint = self.parser.get('REST', 'get_events_pp_tkt_api').format(self.host, self.domain_id, self.workflow_id, ticket_id, page_size)
-        try:
-            resp = requests.get(url=endpoint, headers=self.headers, verify=self.verify_ssl)
-            resp.raise_for_status()
-            return resp.json()
-        except requests.exceptions.HTTPError as e:
-            raise SystemExit("Exception occurred retrieving Policy Planner ticket history events: {0}\nMessage: {1}".format(e, e.response.text))
+        resp = self.__api_request('GET', endpoint)
+        return resp.json()
 
     def assign_pp_ticket(self, ticket_id: str, user_id: str):
         """
@@ -149,94 +151,54 @@ class PolicyPlannerApis():
         :param user_id: ID of user
         :return: API response object
         """
-        ticket_json = self.pull_pp_ticket(ticket_id)
-        workflow_packet_task_id = self.get_workflow_packet_task_id(ticket_json)
-        workflow_task_id = self.get_workflow_task_id(ticket_json)
-        endpoint = self.parser.get('REST', 'assign_pp_tkt_api_url').format(self.host, self.domain_id, self.workflow_id, workflow_task_id, ticket_id, workflow_packet_task_id)
-        try:
-            self.headers['Content-Type'] = 'text/plain'
-            resp = requests.put(url=endpoint, headers=self.headers, data=user_id, verify=self.verify_ssl)
-            self.headers['Content-Type'] = 'applicationjson'
-            resp.raise_for_status()
-            return resp
-        except requests.exceptions.HTTPError as e:
-            raise SystemExit("Exception occurred assigning user to Policy Planner ticket: {0}\nMessage: {1}".format(e, e.response.text))
+        self.pull_pp_ticket(ticket_id)
+        endpoint = self.parser.get('REST', 'assign_pp_tkt_api_url').format(self.host, self.domain_id, self.workflow_id, self.workflow_task_id, ticket_id, self.workflow_packet_task_id)
+        self.fm_api_session.headers['Content-Type'] = 'text/plain'
+        resp = self.__api_request('PUT', endpoint, None, None, user_id)
+        self.fm_api_session.headers['Content-Type'] = 'applicationjson'
+        return resp
 
-    def is_assigned(self, ticket_json: dict) -> bool:
-        """
-        Method to check if a ticket is assigned to the current user
-        :param ticket_json: JSON of targeted ticket
-        :return: True or False
-        """
-        if 'assignee' in ticket_json:
-            return True
-        else:
-            return False
-
-    def unassign_pp_ticket(self, ticket_id: str) -> str:
+    def unassign_pp_ticket(self, ticket_id: str):
         """
         Method to unassign user from Policy Planner ticket
         :param ticket_id: ID of ticket
         :return: Response status code
         """
-        ticket_json = self.pull_pp_ticket(ticket_id)
-        workflow_packet_task_id = self.get_workflow_packet_task_id(ticket_json)
-        workflow_task_id = self.get_workflow_task_id(ticket_json)
-        endpoint = self.parser.get('REST', 'unassign_pp_tkt_api_url').format(self.host, self.domain_id, self.workflow_id, workflow_task_id, ticket_id, workflow_packet_task_id)
-        try:
-            resp = requests.put(url=endpoint, headers=self.headers, verify=self.verify_ssl)
-            resp.raise_for_status()
-            return str(resp.status_code)
-        except requests.exceptions.HTTPError as e:
-            raise SystemExit("Exception occurred unassigning user from Policy Planner ticket: {0}\nMessage: {1}".format(e, e.response.text))
+        self.pull_pp_ticket(ticket_id)
+        endpoint = self.parser.get('REST', 'unassign_pp_tkt_api_url').format(self.host, self.domain_id, self.workflow_id, self.workflow_task_id, ticket_id, self.workflow_packet_task_id)
+        resp = self.__api_request('PUT', endpoint)
+        return resp
 
-    def add_req_pp_ticket(self, ticket_id: str, req_json: dict) -> str:
+    def add_req_pp_ticket(self, ticket_id: str, req_json: dict):
         """
         Method to add requirement to Policy Planner ticket
         :param ticket_id: ID of ticket
         :param req_json: Requirement JSON
         :return: Response status code
         """
-        ticket_json = self.pull_pp_ticket(ticket_id)
-        workflow_task_id = self.get_workflow_task_id(ticket_json)
-        endpoint = self.parser.get('REST', 'add_req_pp_tkt_api_url').format(self.host, self.domain_id, self.workflow_id, workflow_task_id, ticket_id)
-        try:
-            resp = requests.post(url=endpoint, headers=self.headers, json=req_json, verify=self.verify_ssl)
-            resp.raise_for_status()
-            return str(resp.status_code)
-        except requests.exceptions.HTTPError as e:
-            raise SystemExit("Exception occurred adding requirements to Policy Planner ticket: {0}\nMessage: {1}".format(e, e.response.text))
+        self.pull_pp_ticket(ticket_id)
+        endpoint = self.parser.get('REST', 'add_req_pp_tkt_api_url').format(self.host, self.domain_id, self.workflow_id, self.workflow_task_id, ticket_id)
+        resp = self.__api_request('POST', endpoint, req_json)
+        return resp
 
-    def replace_req_pp_ticket(self, ticket_id: str, req_json: dict) -> str:
-        ticket_json = self.pull_pp_ticket(ticket_id)
-        workflow_task_id = self.get_workflow_task_id(ticket_json)
-        endpoint = self.parser.get('REST', 'replace_req_pp_tkt_api_url').format(self.host, self.domain_id, self.workflow_id, workflow_task_id, ticket_id)
-        try:
-            resp = requests.post(url=endpoint, headers=self.headers, json=req_json, verify=self.verify_ssl)
-            resp.raise_for_status()
-            return str(resp.status_code)
-        except requests.exceptions.HTTPError as e:
-            raise SystemExit("Exception occurred replacing requirements on Policy Planner ticket: {0}\nMessage: {1}".format(e, e.response.text))
+    def replace_req_pp_ticket(self, ticket_id: str, req_json: dict):
+        self.pull_pp_ticket(ticket_id)
+        endpoint = self.parser.get('REST', 'replace_req_pp_tkt_api_url').format(self.host, self.domain_id, self.workflow_id, self.workflow_task_id, ticket_id)
+        resp = self.__api_request('POST', endpoint, req_json)
+        return resp
 
     def complete_task_pp_ticket(self, ticket_id: str, button_action: str, timeout=None):
         """
         Method to complete Policy Planner ticket task
         :param ticket_id: Ticket ID
         :param button_action: button value as string, options are: submit, complete, autoDesign, verify, approved
+        :param timeout:
         :return: Response object
         """
-        ticket_json = self.pull_pp_ticket(ticket_id)
-        workflow_packet_task_id = self.get_workflow_packet_task_id(ticket_json)
-        workflow_task_id = self.get_workflow_task_id(ticket_json)
-        endpoint = self.parser.get('REST', 'comp_task_pp_tkt_api').format(self.host, self.domain_id, self.workflow_id, workflow_task_id, ticket_id, workflow_packet_task_id, button_action)
-        try:
-            resp = requests.put(url=endpoint, headers=self.headers, json={}, verify=self.verify_ssl, timeout=timeout)
-            resp.raise_for_status()
-            return resp
-        except requests.exceptions.HTTPError as e:
-            raise SystemExit("Exception occurred completing Policy Planner ticket task: {0}\nMessage: {1}".format(e, e.response.text))
-        except requests.exceptions.Timeout:
-            raise SystemExit("Timeout exception occurred completing Policy Planner ticket task")
+        self.pull_pp_ticket(ticket_id)
+        endpoint = self.parser.get('REST', 'comp_task_pp_tkt_api').format(self.host, self.domain_id, self.workflow_id, self.workflow_task_id, ticket_id, self.workflow_packet_task_id, button_action)
+        resp = self.__api_request('PUT', endpoint, {}, None, None, timeout)
+        return resp
 
     def do_pca(self, ticket_id: str, control_types: str, enable_risk_sa: str, timeout=None):
         """
@@ -250,14 +212,10 @@ class PolicyPlannerApis():
         :param timeout: Timeout amount in seconds, default to None
         :return: response code and reason
         """
-        controls_formatted = self.parse_controls(control_types)
+        controls_formatted = parse_controls(control_types)
         endpoint = self.parser.get('REST', 'run_pca_pp_tkt_api').format(self.host, self.domain_id, self.workflow_id, ticket_id, controls_formatted, enable_risk_sa)
-        try:
-            resp = requests.post(url=endpoint, headers=self.headers, verify=self.verify_ssl, timeout=timeout)
-            resp.raise_for_status()
-            return resp.status_code, resp.reason
-        except requests.exceptions.HTTPError as e:
-            raise SystemExit("Exception occurred completing Pre-Change Assessment on Policy Planner ticket: {0}\nMessage: {1}".format(e, e.response.text))
+        resp = self.__api_request('POST', endpoint, None, None, None, timeout)
+        return resp
 
     def retrieve_pca(self, ticket_id: str) -> dict:
         """
@@ -266,12 +224,8 @@ class PolicyPlannerApis():
         :return: JSON response of PCA
         """
         endpoint = self.parser.get('REST', 'get_pca_pp_tkt_api').format(self.host, self.domain_id, self.workflow_id, ticket_id)
-        try:
-            resp = requests.get(url=endpoint, headers=self.headers, verify=self.verify_ssl)
-            resp.raise_for_status()
-            return resp.json()
-        except requests.exceptions.HTTPError as e:
-            raise SystemExit("Exception occurred retrieving Pre-Change Assessment results for Policy Planner ticket: {0}\nMessage: {1}".format(e, e.response.text))
+        resp = self.__api_request('GET', endpoint)
+        return resp.json()
 
     def run_pca(self, ticket_id: str, control_types: str, enable_risk_sa: str) -> dict:
         """
@@ -287,20 +241,6 @@ class PolicyPlannerApis():
         self.do_pca(ticket_id, control_types, enable_risk_sa)
         return self.retrieve_pca(ticket_id)
 
-    def parse_controls(self, controls: str) -> str:
-        """
-        Method to parse control string passed to a URL parameter
-        :param controls: Comma delimited list of controls as string
-        :return: URL query as string
-        """
-        output = ''
-        controls_list = controls.split(',')
-        for c in range(0, len(controls_list)):
-            if len(controls_list) > 1 and c > 0:
-                output = output + '&'
-            output = output + 'controlTypes=' + controls_list[c]
-        return output
-
     def stage_attachment(self, file_name: str, f) -> dict:
         """
         Method to stage attachment to Policy Planner ticket
@@ -309,14 +249,10 @@ class PolicyPlannerApis():
         :return: JSON response
         """
         endpoint = self.parser.get('REST', 'stage_att_pp_tkt_api').format(self.host, self.domain_id, self.workflow_id)
-        new_headers = self.headers
-        new_headers['Content-Type'] = 'multipart/form-data'
-        try:
-            resp = requests.post(url=endpoint, headers=new_headers, files={file_name: f}, verify=self.verify_ssl)
-            resp.raise_for_status()
-            return resp.json()
-        except requests.exceptions.HTTPError as e:
-            raise SystemExit("Exception occurred staging attachment to Policy Planner ticket: {0}\nMessage: {1}".format(e, e.response.text))
+        self.fm_api_session.headers['Content-Type'] = 'multipart/form-data'
+        resp = self.__api_request('POST', endpoint, None, None, None, None, {file_name: f})
+        self.fm_api_session.headers['Content-Type'] = 'applicationjson'
+        return resp.json()
 
     def post_attachment(self, ticket_id: str, attachment_json: dict) -> dict:
         """
@@ -325,15 +261,9 @@ class PolicyPlannerApis():
         :param attachment_json: staged file JSON
         :return: JSON response
         """
-        new_headers = self.headers
-        new_headers.pop('Content-Type', None)
         endpoint = self.parser.get('REST', 'post_att_pp_tkt_api').format(self.host, self.domain_id, self.workflow_id, ticket_id)
-        try:
-            resp = requests.put(url=endpoint, headers=new_headers, json=attachment_json, verify=self.verify_ssl)
-            resp.raise_for_status()
-            return resp.json()
-        except requests.exceptions.HTTPError as e:
-            raise SystemExit("Exception occurred posting attachment to Policy Planner ticket: {0}\nMessage: {1}".format(e, e.response.text))
+        resp = self.__api_request('PUT', endpoint, attachment_json)
+        return resp.json()
 
     def add_attachment(self, ticket_id: str, file_name: str, f, description: str):
         """
@@ -357,24 +287,21 @@ class PolicyPlannerApis():
         :param behavior: Add requirement behavior, either append or replace
         """
         endpoint = self.parser.get('REST', 'parse_csv_pp_tkt_api').format(self.host, self.domain_id, self.workflow_id)
-        self.headers['Content-Type'] = 'multipart/form-data'
-        try:
-            resp = requests.post(url=endpoint, headers=self.headers, files={file_name: f}, verify=self.verify_ssl)
-            resp.raise_for_status()
-        except requests.exceptions.HTTPError as e:
-            raise SystemExit("Exception occurred parsing CSV: {0}\nMessage: {1}".format(e, e.response.text))
+        self.fm_api_session.headers['Content-Type'] = 'multipart/form-data'
+        resp = self.__api_request('POST', endpoint, None, None, None, None, {file_name: f})
         requirements_parsed = resp.json()
         requirements_formatted = {'requirements': []}
         for r in requirements_parsed['policyPlanRequirementErrorDTOs']:
             requirements_formatted['requirements'].append(r['policyPlanRequirementDTO'])
-        self.headers['Content-Type'] = 'application/json; charset=utf-8'
+        self.fm_api_session.headers['Content-Type'] = 'application/json; charset=utf-8'
         if behavior == "replace":
             post_req = self.replace_req_pp_ticket(ticket_id, requirements_formatted)
         else:
             post_req = self.add_req_pp_ticket(ticket_id, requirements_formatted)
         f.seek(0)
-        self.headers['Content-Type'] = 'multipart/form-data'
+        self.fm_api_session.headers['Content-Type'] = 'multipart/form-data'
         self.add_attachment(ticket_id, file_name, f, 'Attached original CSV file')
+        self.fm_api_session.headers['Content-Type'] = 'applicationjson'
         return post_req
 
     def get_reqs(self, ticket_id: str) -> dict:
@@ -383,15 +310,10 @@ class PolicyPlannerApis():
         :param ticket_id: Ticket ID
         :return: JSON of requirements
         """
-        ticket_json = self.pull_pp_ticket(ticket_id)
-        workflow_task_id = self.get_workflow_task_id(ticket_json)
-        endpoint = self.parser.get('REST', 'get_recs_pp_tkt_api').format(self.host, self.domain_id, self.workflow_id, workflow_task_id, ticket_id)
-        try:
-            resp = requests.get(url=endpoint, headers=self.headers, verify=self.verify_ssl)
-            resp.raise_for_status()
-            return resp.json()
-        except requests.exceptions.HTTPError as e:
-            raise SystemExit("Exception retrieving requirements from Policy Planner ticket: {0}\nMessage: {1}".format(e, e.response.text))
+        self.pull_pp_ticket(ticket_id)
+        endpoint = self.parser.get('REST', 'get_recs_pp_tkt_api').format(self.host, self.domain_id, self.workflow_id, self.workflow_task_id, ticket_id)
+        resp = self.__api_request('GET', endpoint)
+        return resp.json()
 
     def get_changes(self, ticket_id: str) -> dict:
         """
@@ -399,15 +321,10 @@ class PolicyPlannerApis():
         :param ticket_id: Ticket ID
         :return: JSON of changes
         """
-        ticket_json = self.pull_pp_ticket(ticket_id)
-        workflow_task_id = self.get_workflow_task_id(ticket_json)
-        endpoint = self.parser.get('REST', 'get_pp_tkt_changes').format(self.host, self.domain_id, self.workflow_id, workflow_task_id, ticket_id)
-        try:
-            resp = requests.get(url=endpoint, headers=self.headers, verify=self.verify_ssl)
-            resp.raise_for_status()
-            return resp.json()
-        except requests.exceptions.HTTPError as e:
-            raise SystemExit("Exception retrieving changes from Policy Planner ticket: {0}\nMessage: {1}".format(e, e.response.text))
+        self.pull_pp_ticket(ticket_id)
+        endpoint = self.parser.get('REST', 'get_pp_tkt_changes').format(self.host, self.domain_id, self.workflow_id, self.workflow_task_id, ticket_id)
+        resp = self.__api_request('GET', endpoint)
+        return resp.json()
 
     def del_all_reqs(self, ticket_id: str) -> dict:
         """
@@ -415,17 +332,12 @@ class PolicyPlannerApis():
         :param ticket_id: Ticket ID as string
         :return: dictionary of response codes
         """
-        ticket_json = self.pull_pp_ticket(ticket_id)
-        workflow_task_id = self.get_workflow_task_id(ticket_json)
+        self.pull_pp_ticket(ticket_id)
         req_json = self.get_reqs(ticket_id)
         reqs = {}
         for r in req_json['results']:
-            endpoint = self.parser.get('REST', 'del_recs_pp_tkt_api').format(self.host, self.domain_id, self.workflow_id, workflow_task_id, ticket_id, str(r['id']))
-            try:
-                resp = requests.delete(url=endpoint, headers=self.headers, verify=self.verify_ssl)
-                resp.raise_for_status()
-            except requests.exceptions.HTTPError as e:
-                raise SystemExit("Exception deleting Policy Planner ticket requirement: {0}\nMessage: {1}".format(e, e.response.text))
+            endpoint = self.parser.get('REST', 'del_recs_pp_tkt_api').format(self.host, self.domain_id, self.workflow_id, self.workflow_task_id, ticket_id, str(r['id']))
+            resp = self.__api_request('DELETE', endpoint)
             reqs[r['id']] = resp.status_code
         return reqs
 
@@ -437,12 +349,8 @@ class PolicyPlannerApis():
         :return: Response code, reason, JSON as tuple
         """
         endpoint = self.parser.get('REST', 'app_req_pp_tkt_api').format(self.host, self.domain_id, self.workflow_id, ticket_id, req_id)
-        try:
-            resp = requests.put(url=endpoint, headers=self.headers, json={}, verify=self.verify_ssl)
-            resp.raise_for_status()
-            return resp.status_code, resp.reason
-        except requests.exceptions.HTTPError as e:
-            raise SystemExit("Exception approving Policy Planner ticket requirement: {0}\nMessage: {1}".format(e, e.response.text))
+        resp = self.__api_request('PUT', endpoint, {})
+        return resp
 
     def add_change(self, ticket_id: str, req_id: str, change: dict) -> tuple[int, str, Any]:
         """
@@ -452,15 +360,10 @@ class PolicyPlannerApis():
         :param change: JSON of change
         :return: Response code, reason, JSON as list
         """
-        ticket_json = self.pull_pp_ticket(ticket_id)
-        workflow_task_id = self.get_workflow_task_id(ticket_json)
-        endpoint = self.parser.get('REST', 'add_change_pp_tkt_api').format(self.host, self.domain_id, self.workflow_id, workflow_task_id, ticket_id, req_id)
-        try:
-            resp = requests.post(url=endpoint, headers=self.headers, json=change, verify=self.verify_ssl)
-            resp.raise_for_status()
-            return resp.status_code, resp.reason, resp.json()
-        except requests.exceptions.HTTPError as e:
-            raise SystemExit("Exception adding Policy Planner ticket change: {0}\nMessage: {1}".format(e, e.response.text))
+        self.pull_pp_ticket(ticket_id)
+        endpoint = self.parser.get('REST', 'add_change_pp_tkt_api').format(self.host, self.domain_id, self.workflow_id, self.workflow_task_id, ticket_id, req_id)
+        resp = self.__api_request('POST', endpoint, change)
+        return resp.status_code, resp.reason, resp.json()
 
     def update_change(self, ticket_id: str, req_id: str, change_id: str, change_json: dict):
         """
@@ -471,15 +374,10 @@ class PolicyPlannerApis():
         :param change_json: JSON of change
         :return: Response code, reason, JSON as list
         """
-        ticket_json = self.pull_pp_ticket(ticket_id)
-        workflow_task_id = self.get_workflow_task_id(ticket_json)
-        endpoint = self.parser.get('REST', 'update_pp_tkt_change').format(self.host, self.domain_id, self.workflow_id, workflow_task_id, ticket_id, req_id, change_id)
-        try:
-            resp = requests.put(url=endpoint, headers=self.headers, json=change_json, verify=self.verify_ssl)
-            resp.raise_for_status()
-            return resp.status_code, resp.reason
-        except requests.exceptions.HTTPError as e:
-            raise SystemExit("Exception updating Policy Planner ticket change: {0}\nMessage: {1}".format(e, e.response.text))
+        self.pull_pp_ticket(ticket_id)
+        endpoint = self.parser.get('REST', 'update_pp_tkt_change').format(self.host, self.domain_id, self.workflow_id, self.workflow_task_id, ticket_id, req_id, change_id)
+        resp = self.__api_request('PUT', endpoint, change_json)
+        return resp
 
     def add_comment(self, ticket_id: str, comment: str):
         """
@@ -491,12 +389,8 @@ class PolicyPlannerApis():
             'comment': comment
         }
         endpoint = self.parser.get('REST', 'add_comment_pp_tkt_api').format(self.host, self.domain_id, self.workflow_id, ticket_id)
-        try:
-            resp = requests.post(url=endpoint, headers=self.headers, json=comment_json, verify=self.verify_ssl)
-            resp.raise_for_status()
-            return resp.status_code, resp.reason
-        except requests.exceptions.HTTPError as e:
-            raise SystemExit("Exception adding comment to Policy Planner ticket: {0}\nMessage: {1}".format(e, e.response.text))
+        resp = self.__api_request('POST', endpoint, comment_json)
+        return resp
 
     def get_comments(self, ticket_id: str) -> dict:
         """
@@ -505,12 +399,8 @@ class PolicyPlannerApis():
         :return: Comment JSON
         """
         endpoint = self.parser.get('REST', 'get_comments_pp_tkt_api').format(self.host, self.domain_id, self.workflow_id, ticket_id)
-        try:
-            resp = requests.get(url=endpoint, headers=self.headers, verify=self.verify_ssl)
-            resp.raise_for_status()
-            return resp.json()
-        except requests.exceptions.HTTPError as e:
-            raise SystemExit("Exception retrieving comments from Policy Planner ticket: {0}\nMessage: {1}".format(e, e.response.text))
+        resp = self.__api_request('GET', endpoint)
+        return resp.json()
 
     def del_comment(self, ticket_id: str, comment_id: str):
         """
@@ -519,33 +409,19 @@ class PolicyPlannerApis():
         :param comment_id: Comment ID
         """
         endpoint = self.parser.get('REST', 'del_comment_pp_tkt_api').format(self.host, self.domain_id, self.workflow_id, ticket_id, comment_id)
-        try:
-            resp = requests.delete(url=endpoint, headers=self.headers, verify=self.verify_ssl)
-            resp.raise_for_status()
-            return resp.status_code, resp.reason
-        except requests.exceptions.HTTPError as e:
-            raise SystemExit("Exception deleting comment from Policy Planner ticket: {0}\nMessage: {1}".format(e, e.response.text))
+        resp = self.__api_request('DELETE', endpoint)
+        return resp
 
     def logout(self):
         """
         Method to logout of session
         """
-        self.headers['Connection'] = 'Close'
+        self.fm_api_session.headers['Connection'] = 'Close'
         endpoint = self.parser.get('REST', 'logout_api_url').format(self.host)
-        for n in range(self.max_retries):
-            try:
-                resp = requests.post(url=endpoint, headers=self.headers, verify=self.verify_ssl)
-                if resp.status_code == 401:
-                    self.headers = self.api_instance.get_auth_token()
-                else:
-                    resp.raise_for_status()
-                    return resp.status_code, resp.reason
-            except requests.exceptions.HTTPError as e:
-                raise SystemExit("Exception logging out of session: {0}\nMessage: {1}".format(e, e.response.text))
-        else:
-            raise SystemExit("Exception logging out of session: {0}\nMessage: {1}".format(resp.status_code, resp.reason))
+        resp = self.__api_request('POST', endpoint)
+        return resp
 
-    def get_workflow_packet_task_id(self, ticket_json: dict) -> str:
+    def get_workflow_packet_task_id(self, ticket_json: dict):
         """
         Retrieves workflowPacketTaskId value from current stage of provided ticket
         :param ticket_json: JSON of ticket, retrieved using pull_ticket function
@@ -555,9 +431,9 @@ class PolicyPlannerApis():
         workflow_packet_tasks = ticket_json['workflowPacketTasks']
         for t in workflow_packet_tasks:
             if t['workflowTask']['name'] == curr_stage and 'completed' not in t:
-                return str(t['id'])
+                self.workflow_packet_task_id = str(t['id'])
 
-    def get_workflow_task_id(self, ticket_json: dict) -> str:
+    def get_workflow_task_id(self, ticket_json: dict):
         """
         Retrieves workflowTaskId value from current stage of provided ticket
         :param ticket_json: JSON of ticket, retrieved using pull_ticket function
@@ -567,27 +443,25 @@ class PolicyPlannerApis():
         workflow_packet_tasks = ticket_json['workflowPacketTasks']
         for t in workflow_packet_tasks:
             if t['workflowTask']['name'] == curr_stage and 'completed' not in t:
-                return str(t['workflowTask']['id'])
+                self.workflow_task_id = str(t['workflowTask']['id'])
 
     def get_workflow_id_by_workflow_name(self, domain_id: str, workflow_name: str) -> str:
         """ Takes domainId and workflow name as input parameters and returns you
             the workflowId for given workflow name """
         endpoint = self.parser.get('REST', 'find_all_workflows_url').format(self.host, domain_id)
         try:
-            self.api_resp = requests.get(url=endpoint, headers=self.headers, verify=self.verify_ssl)
-            self.api_resp.raise_for_status()
-            count_of_workflows = self.api_resp.json().get('total')
+            resp = self.__api_request('GET', endpoint)
+            count_of_workflows = resp.json().get('total')
 
             # Here, default pageSize is 10
             # CASE 1 :If total workflows > 10 then second call will be made to get all the remaining workflows
             # CASE 2 :No need to make a second call if total workflows < 10 as we already have all of them
-            if (count_of_workflows > 10):
+            if count_of_workflows > 10:
                 parameters = {'includeDisabled': False, 'pageSize': count_of_workflows}
-                self.api_resp = requests.get(url=endpoint, headers=self.headers, params=parameters, verify=self.verify_ssl)
-                self.api_resp.raise_for_status()
-            list_of_workflows = self.api_resp.json().get('results')
+                resp = self.__api_request('GET', endpoint, None, parameters)
+            list_of_workflows = resp.json().get('results')
             for workflow in list_of_workflows:
-                if (workflow['workflow']['name'] == workflow_name):
+                if workflow['workflow']['name'] == workflow_name:
                     workflow_id = workflow['workflow']['id']
                     return workflow_id
         except requests.exceptions.HTTPError as e:
