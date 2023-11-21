@@ -4,7 +4,8 @@ import csv
 import authenticate_user
 from security_manager_apis.get_properties_data import get_properties_data
 
-class SecurityManagerApis():
+
+class SecurityManagerApis:
 
     def __init__(self, host: str, username: str, password: str, verify_ssl: bool, domain_id: str, suppress_ssl_warning=False):
         """ User needs to pass host,username,password,and verify_ssl as parameters while
@@ -56,7 +57,7 @@ class SecurityManagerApis():
         :return: JSON of results
         """
         endpoint = self.parser.get('REST', 'siql_query_sm_api').format(self.host, query_type)
-        parameters = {'q': query, 'pageSize': page_size }
+        parameters = {'q': query, 'pageSize': page_size}
         try:
             resp = self.fm_api_session.get(url=endpoint, params=parameters)
             resp.raise_for_status()
@@ -71,7 +72,7 @@ class SecurityManagerApis():
         :return: Response object
         """
         endpoint = self.parser.get('REST', 'create_device_group').format(self.host, self.domain_id)
-        payload = {'name': device_group_name, 'domainId': self.domain_id }
+        payload = {'name': device_group_name, 'domainId': self.domain_id}
         try:
             resp = self.fm_api_session.post(url=endpoint, json=payload)
             resp.raise_for_status()
