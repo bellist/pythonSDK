@@ -5,6 +5,7 @@ import os
 thisfolder = os.path.dirname(os.path.abspath(__file__))
 initfile = os.path.join(thisfolder, 'application.properties')
 
+
 def get_properties_data():
     """ Returning a parser which will be used to read
         application.properties file data """
