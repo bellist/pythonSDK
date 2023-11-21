@@ -48,9 +48,8 @@ class PolicyPlannerApis:
         if suppress_ssl_warning:
             requests.packages.urllib3.disable_warnings(requests.packages.urllib3.exceptions.InsecureRequestWarning)
         self.parser = get_properties_data()
-        self.api_instance = authenticate_user.Authentication(host, username, password, verify_ssl)
-        self.fm_api_session = self.api_instance.get_auth_token()
         self.host = host
+        self.fm_api_session = authenticate_user.Authentication(self.host, username, password, verify_ssl).get_auth_token()
         self.domain_id = domain_id
         self.workflow_id = self.get_workflow_id_by_workflow_name(domain_id, workflow_name)
         self.workflow_task_id = ""
