@@ -83,6 +83,8 @@ class SecurityManagerApis:
             raise
         except requests.exceptions.Timeout:
             raise
+        except Exception:
+            raise
 
     def get_devices(self) -> dict:
         """

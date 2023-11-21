@@ -64,6 +64,8 @@ class PolicyPlannerApis:
             raise
         except requests.exceptions.Timeout:
             raise
+        except Exception:
+            raise
 
     def create_pp_ticket(self, request_body: dict) -> dict:
         """
@@ -448,20 +450,17 @@ class PolicyPlannerApis:
         """ Takes domainId and workflow name as input parameters and returns you
             the workflowId for given workflow name """
         endpoint = self.parser.get('REST', 'find_all_workflows_url').format(self.host, domain_id)
-        try:
-            resp = self.__api_request('GET', endpoint)
-            count_of_workflows = resp.json().get('total')
+        resp = self.__api_request('GET', endpoint)
+        count_of_workflows = resp.json().get('total')
 
-            # Here, default pageSize is 10
-            # CASE 1 :If total workflows > 10 then second call will be made to get all the remaining workflows
-            # CASE 2 :No need to make a second call if total workflows < 10 as we already have all of them
-            if count_of_workflows > 10:
-                parameters = {'includeDisabled': False, 'pageSize': count_of_workflows}
-                resp = self.__api_request('GET', endpoint, None, parameters)
-            list_of_workflows = resp.json().get('results')
-            for workflow in list_of_workflows:
-                if workflow['workflow']['name'] == workflow_name:
-                    workflow_id = workflow['workflow']['id']
-                    return workflow_id
-        except requests.exceptions.HTTPError as e:
-            raise SystemExit("Exception retrieving workflow ID: {0}\nMessage: {1}".format(e, e.response.text))
+        # Here, default pageSize is 10
+        # CASE 1 :If total workflows > 10 then second call will be made to get all the remaining workflows
+        # CASE 2 :No need to make a second call if total workflows < 10 as we already have all of them
+        if count_of_workflows > 10:
+            parameters = {'includeDisabled': False, 'pageSize': count_of_workflows}
+            resp = self.__api_request('GET', endpoint, None, parameters)
+        list_of_workflows = resp.json().get('results')
+        for workflow in list_of_workflows:
+            if workflow['workflow']['name'] == workflow_name:
+                workflow_id = workflow['workflow']['id']
+                return workflow_id
